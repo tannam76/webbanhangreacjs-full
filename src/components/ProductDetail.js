@@ -1,17 +1,44 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import '../assets/style/product-detail.css';
 import { useCart } from '../contexts/CartContext';
-import { formatCurrency, products } from '../data/products';
+import { formatCurrency } from '../data/products';
+import { fetchProductById, fetchProducts } from '../services/api';
 
 function ProductDetail() {
   const { id } = useParams();
   const { addToCart } = useCart();
+  const [product, setProduct] = useState(null);
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const product = products.find((p) => p.id === parseInt(id, 10));
-  const relatedProducts = products
-    .filter((item) => item.category === product?.category && item.id !== product.id)
-    .slice(0, 3);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchProductById(id)
+      .then((data) => {
+        setProduct(data);
+        if (data?.category) {
+          fetchProducts('', data.category).then((all) => {
+            const related = all.filter((p) => p.id !== data.id).slice(0, 3);
+            setRelatedProducts(related);
+          });
+        }
+      })
+      .catch((err) => console.warn('Lỗi tải sản phẩm:', err))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <main className="product-detail-container" style={{ textAlign: 'center', padding: '60px 0' }}>
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Đang tải...</span>
+        </div>
+        <p style={{ marginTop: '12px' }}>Đang tải thông tin sản phẩm...</p>
+      </main>
+    );
+  }
 
   if (!product) {
     return (

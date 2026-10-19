@@ -1,5 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { products as initialProducts } from '../data/products';
+import {
+  checkServerHealth,
+  createProduct as apiCreateProduct,
+  deleteProduct as apiDeleteProduct,
+  fetchCustomers,
+  fetchOrders,
+  fetchProducts,
+  updateOrderStatus as apiUpdateOrderStatus,
+  updateProduct as apiUpdateProduct,
+} from '../services/api';
 
 const initialCustomers = [
   { id: 1, name: 'Nguyễn Thị Lan', email: 'lan@gmail.com', totalSpent: 12500000, orders: 4 },
@@ -32,13 +42,62 @@ function Admin() {
   const [orderList, setOrderList] = useState(initialOrders);
   const [formData, setFormData] = useState(emptyProduct);
   const [editingId, setEditingId] = useState(null);
+  const [dbStatus, setDbStatus] = useState({ connected: false, checked: false });
+  const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
+
+  // Kiểm tra kết nối backend và MySQL
+  const loadData = async () => {
+    try {
+      const health = await checkServerHealth();
+      setDbStatus({
+        connected: health.databaseConnected || false,
+        checked: true,
+        message: health.message,
+      });
+
+      // Tải dữ liệu từ backend
+      const [productsRes, ordersRes, customersRes] = await Promise.allSettled([
+        fetchProducts(),
+        fetchOrders(),
+        fetchCustomers(),
+      ]);
+
+      if (productsRes.status === 'fulfilled' && productsRes.value?.length > 0) {
+        setProductList(productsRes.value);
+      }
+      if (ordersRes.status === 'fulfilled' && ordersRes.value?.length > 0) {
+        setOrderList(ordersRes.value);
+      }
+      if (customersRes.status === 'fulfilled' && customersRes.value?.length > 0) {
+        setCustomerList(customersRes.value);
+      }
+    } catch (err) {
+      console.warn('Lỗi loadData Admin:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const showNotification = (type, text) => {
+    setActionMessage({ type, text });
+    setTimeout(() => setActionMessage({ type: '', text: '' }), 3500);
+  };
 
   const stats = useMemo(() => {
-    const totalRevenue = orderList.reduce((sum, order) => sum + order.total, 0);
+    const totalRevenue = orderList.reduce(
+      (sum, order) => (order.status !== 'Đã hủy' ? sum + Number(order.total || 0) : sum),
+      0
+    );
     const pendingOrders = orderList.filter((order) => order.status === 'Chờ xác nhận').length;
 
     return [
-      { label: 'Tổng doanh thu', value: new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalRevenue), accent: 'primary' },
+      {
+        label: 'Tổng doanh thu',
+        value: new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalRevenue),
+        accent: 'primary',
+      },
       { label: 'Đơn hàng', value: String(orderList.length), accent: 'success' },
       { label: 'Khách hàng', value: String(customerList.length), accent: 'warning' },
       { label: 'Sản phẩm', value: String(productList.length), accent: 'info' },
@@ -56,44 +115,87 @@ function Admin() {
     setEditingId(null);
   };
 
-  const handleSubmitProduct = (event) => {
+  const handleSubmitProduct = async (event) => {
     event.preventDefault();
 
     if (!formData.name.trim()) {
+      showNotification('danger', 'Vui lòng nhập tên sản phẩm.');
       return;
     }
 
-    if (editingId) {
-      setProductList((prev) =>
-        prev.map((item) => (item.id === editingId ? { ...item, ...formData, price: Number(formData.price) } : item))
-      );
-    } else {
-      const newProduct = {
-        ...formData,
-        id: Date.now(),
-        price: Number(formData.price || 0),
-      };
-      setProductList((prev) => [newProduct, ...prev]);
+    try {
+      if (editingId) {
+        // Cập nhật sản phẩm qua MySQL API
+        await apiUpdateProduct(editingId, formData);
+        setProductList((prev) =>
+          prev.map((item) => (item.id === editingId ? { ...item, ...formData, price: Number(formData.price) } : item))
+        );
+        showNotification('success', `Đã cập nhật sản phẩm "${formData.name}" vào CSDL MySQL.`);
+      } else {
+        // Tạo mới sản phẩm qua MySQL API
+        const res = await apiCreateProduct(formData);
+        const savedItem = res?.data || {
+          ...formData,
+          id: Date.now(),
+          price: Number(formData.price || 0),
+        };
+        setProductList((prev) => [savedItem, ...prev]);
+        showNotification('success', `Đã lưu sản phẩm mới "${formData.name}" vào CSDL MySQL.`);
+      }
+      resetForm();
+    } catch (err) {
+      console.warn('Lỗi lưu sản phẩm vào API:', err);
+      // Fallback cục bộ
+      if (editingId) {
+        setProductList((prev) =>
+          prev.map((item) => (item.id === editingId ? { ...item, ...formData, price: Number(formData.price) } : item))
+        );
+      } else {
+        const newProduct = {
+          ...formData,
+          id: Date.now(),
+          price: Number(formData.price || 0),
+        };
+        setProductList((prev) => [newProduct, ...prev]);
+      }
+      showNotification('info', 'Đã lưu thay đổi cục bộ (Backend chưa bật).');
+      resetForm();
     }
-
-    resetForm();
   };
 
   const handleEditProduct = (product) => {
     setEditingId(product.id);
     setFormData({ ...product, id: product.id });
     setActiveTab('products');
+    window.scrollTo({ top: 300, behavior: 'smooth' });
   };
 
-  const handleDeleteProduct = (productId) => {
-    setProductList((prev) => prev.filter((item) => item.id !== productId));
-    if (editingId === productId) {
-      resetForm();
+  const handleDeleteProduct = async (productId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này không?')) return;
+
+    try {
+      await apiDeleteProduct(productId);
+      setProductList((prev) => prev.filter((item) => item.id !== productId));
+      if (editingId === productId) resetForm();
+      showNotification('success', 'Đã xóa sản phẩm khỏi CSDL MySQL.');
+    } catch (err) {
+      console.warn('Lỗi xóa sản phẩm qua API:', err);
+      setProductList((prev) => prev.filter((item) => item.id !== productId));
+      if (editingId === productId) resetForm();
+      showNotification('info', 'Đã xóa sản phẩm khỏi bộ nhớ tạm.');
     }
   };
 
-  const updateOrderStatus = (orderId, nextStatus) => {
-    setOrderList((prev) => prev.map((order) => (order.id === orderId ? { ...order, status: nextStatus } : order)));
+  const updateOrderStatus = async (orderId, nextStatus) => {
+    try {
+      await apiUpdateOrderStatus(orderId, nextStatus);
+      setOrderList((prev) => prev.map((order) => (order.id === orderId ? { ...order, status: nextStatus } : order)));
+      showNotification('success', `Đã cập nhật đơn hàng ${orderId} thành: "${nextStatus}" trong MySQL.`);
+    } catch (err) {
+      console.warn('Lỗi cập nhật trạng thái đơn hàng:', err);
+      setOrderList((prev) => prev.map((order) => (order.id === orderId ? { ...order, status: nextStatus } : order)));
+      showNotification('info', `Đã cập nhật trạng thái đơn ${orderId} (cục bộ).`);
+    }
   };
 
   const statusClass = (status) => {
@@ -105,12 +207,33 @@ function Admin() {
 
   return (
     <div className="container py-4" style={{ maxWidth: 1280 }}>
+      {/* Thông báo trạng thái kết nối Database */}
+      <div className={`alert ${dbStatus.connected ? 'alert-success' : 'alert-warning'} d-flex justify-content-between align-items-center mb-4`}>
+        <div>
+          <strong>{dbStatus.connected ? '🟢 MySQL Database: Đã kết nối' : '🟡 Chế độ Cục bộ / Đang đợi MySQL'}</strong>
+          <div className="small text-muted">
+            {dbStatus.connected
+              ? 'Máy chủ Node.js & CSDL MySQL (webbanhang_db) đang hoạt động ổn định.'
+              : 'Hãy bật Apache và MySQL trên XAMPP/Laragon (cổng 3306) để đồng bộ dữ liệu vào CSDL thật.'}
+          </div>
+        </div>
+        <button className="btn btn-sm btn-outline-secondary" onClick={loadData}>
+          🔄 Kiểm tra lại kết nối
+        </button>
+      </div>
+
+      {actionMessage.text && (
+        <div className={`alert alert-${actionMessage.type} mb-4`} role="alert">
+          {actionMessage.text}
+        </div>
+      )}
+
       <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <div>
           <p className="text-uppercase text-primary fw-semibold mb-1" style={{ letterSpacing: '0.12rem' }}>Dashboard</p>
-          <h1 className="fw-bold mb-0">Admin Panel</h1>
+          <h1 className="fw-bold mb-0">Admin Panel (MySQL)</h1>
         </div>
-        <button className="btn btn-primary px-4 py-2 rounded-pill shadow-sm" onClick={() => setActiveTab('products')}>
+        <button className="btn btn-primary px-4 py-2 rounded-pill shadow-sm" onClick={() => { setActiveTab('products'); resetForm(); }}>
           + Thêm sản phẩm
         </button>
       </div>
@@ -138,7 +261,7 @@ function Admin() {
                 className={`btn btn-sm rounded-pill px-3 ${activeTab === tab ? 'btn-dark' : 'btn-light text-dark'}`}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab === 'products' ? 'Sản phẩm' : tab === 'orders' ? 'Đơn hàng' : 'Khách hàng'}
+                {tab === 'products' ? `Sản phẩm (${productList.length})` : tab === 'orders' ? `Đơn hàng (${orderList.length})` : `Khách hàng (${customerList.length})`}
               </button>
             ))}
           </div>
@@ -151,11 +274,11 @@ function Admin() {
                     <h5 className="fw-bold mb-3">{editingId ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm mới'}</h5>
                     <form onSubmit={handleSubmitProduct} className="row g-3">
                       <div className="col-12">
-                        <label className="form-label">Tên sản phẩm</label>
-                        <input className="form-control" name="name" value={formData.name} onChange={handleInputChange} />
+                        <label className="form-label">Tên sản phẩm *</label>
+                        <input className="form-control" name="name" value={formData.name} onChange={handleInputChange} required />
                       </div>
                       <div className="col-md-6">
-                        <label className="form-label">Danh mục</label>
+                        <label className="form-label">Danh mục *</label>
                         <select className="form-select" name="category" value={formData.category} onChange={handleInputChange}>
                           <option>Công nghệ</option>
                           <option>Thời trang</option>
@@ -163,20 +286,20 @@ function Admin() {
                         </select>
                       </div>
                       <div className="col-md-6">
-                        <label className="form-label">Giá</label>
-                        <input type="number" className="form-control" name="price" value={formData.price} onChange={handleInputChange} />
+                        <label className="form-label">Giá (VND) *</label>
+                        <input type="number" className="form-control" name="price" value={formData.price} onChange={handleInputChange} required min="0" />
                       </div>
                       <div className="col-12">
-                        <label className="form-label">Hình ảnh</label>
+                        <label className="form-label">Đường dẫn hình ảnh</label>
                         <input className="form-control" name="image" value={formData.image} onChange={handleInputChange} />
                       </div>
                       <div className="col-12">
-                        <label className="form-label">Mô tả</label>
+                        <label className="form-label">Mô tả sản phẩm</label>
                         <textarea className="form-control" rows="3" name="description" value={formData.description} onChange={handleInputChange} />
                       </div>
                       <div className="col-12">
-                        <label className="form-label">Badge</label>
-                        <input className="form-control" name="badge" value={formData.badge} onChange={handleInputChange} />
+                        <label className="form-label">Nhãn (Badge)</label>
+                        <input className="form-control" name="badge" value={formData.badge} onChange={handleInputChange} placeholder="Mới, Hot, Bán chạy..." />
                       </div>
                       <div className="col-12 d-flex gap-2">
                         <button className="btn btn-primary" type="submit">{editingId ? 'Lưu thay đổi' : 'Thêm mới'}</button>
@@ -244,14 +367,17 @@ function Admin() {
                       <th>Ngày</th>
                       <th>Tổng tiền</th>
                       <th>Trạng thái</th>
-                      <th>Cập nhật</th>
+                      <th>Cập nhật trạng thái</th>
                     </tr>
                   </thead>
                   <tbody>
                     {orderList.map((order) => (
                       <tr key={order.id}>
                         <td className="fw-semibold">{order.id}</td>
-                        <td>{order.customer}</td>
+                        <td>
+                          <div>{order.customer}</div>
+                          {order.phone && <small className="text-muted">{order.phone}</small>}
+                        </td>
                         <td>{order.date}</td>
                         <td>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(order.total)}</td>
                         <td><span className={`badge rounded-pill ${statusClass(order.status)}`}>{order.status}</span></td>

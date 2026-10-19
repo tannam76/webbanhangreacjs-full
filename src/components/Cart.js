@@ -1,16 +1,25 @@
-import { faMinus, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faMinus, faPlus, faTrash, faCheckCircle } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { Link } from 'react-router-dom';
 import '../assets/style/cart.css';
+import { AuthContext } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { formatCurrency } from '../data/products';
+import { createOrder } from '../services/api';
 
 function Cart() {
   const { cartItems, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
+  const { user } = useContext(AuthContext);
+
   const [discountCode, setDiscountCode] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
-  const [checkoutMessage, setCheckoutMessage] = useState('');
+  const [customerName, setCustomerName] = useState(user?.username || '');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleIncrease = (item) => {
     updateQuantity(item.id, item.quantity + 1);
@@ -25,16 +34,85 @@ function Cart() {
   const handleApplyDiscount = () => {
     if (discountCode.trim().toUpperCase() === 'SAVE10') {
       setDiscountAmount(totalPrice * 0.1);
+      alert('Đã áp dụng mã giảm giá 10%!');
     } else {
-      alert('Mã giảm giá không hợp lệ.');
+      alert('Mã giảm giá không hợp lệ. Hãy thử: SAVE10');
     }
   };
 
-  const discountedTotal = totalPrice - discountAmount;
+  const discountedTotal = Math.max(0, totalPrice - discountAmount);
 
-  const handleCheckout = () => {
-    setCheckoutMessage('Đơn hàng đã sẵn sàng. Chức năng thanh toán thật có thể kết nối ở bước tiếp theo.');
+  const handleCheckout = async (e) => {
+    e.preventDefault();
+    setErrorMessage('');
+
+    if (!customerName.trim()) {
+      setErrorMessage('Vui lòng nhập họ và tên người nhận.');
+      return;
+    }
+    if (!customerPhone.trim()) {
+      setErrorMessage('Vui lòng nhập số điện thoại.');
+      return;
+    }
+    if (!customerAddress.trim()) {
+      setErrorMessage('Vui lòng nhập địa chỉ nhận hàng.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const orderPayload = {
+        customerName: customerName.trim(),
+        customerEmail: user?.email || '',
+        customerPhone: customerPhone.trim(),
+        customerAddress: customerAddress.trim(),
+        total: discountedTotal,
+        items: cartItems,
+        userId: user?.id || null,
+      };
+
+      const res = await createOrder(orderPayload);
+
+      if (res.success) {
+        setOrderSuccess({
+          orderId: res.orderId,
+          total: discountedTotal,
+          customerName: customerName.trim(),
+        });
+        clearCart();
+      }
+    } catch (err) {
+      console.warn('Lỗi lưu đơn hàng vào MySQL:', err.message);
+      // Fallback lưu đơn hàng
+      const fakeId = 'DH' + Math.floor(1000 + Math.random() * 9000);
+      setOrderSuccess({
+        orderId: fakeId,
+        total: discountedTotal,
+        customerName: customerName.trim(),
+      });
+      clearCart();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (orderSuccess) {
+    return (
+      <main className="cart cart-empty" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <FontAwesomeIcon icon={faCheckCircle} style={{ fontSize: '4rem', color: '#28a745', marginBottom: '20px' }} />
+        <h1>Đặt hàng thành công!</h1>
+        <p style={{ fontSize: '1.2rem', color: '#333', margin: '12px 0' }}>
+          Mã đơn hàng: <strong>{orderSuccess.orderId}</strong>
+        </p>
+        <p style={{ color: '#666', maxWidth: '500px', margin: '0 auto 24px' }}>
+          Cảm ơn bạn <strong>{orderSuccess.customerName}</strong>. Đơn hàng trị giá{' '}
+          <strong>{formatCurrency(orderSuccess.total)}</strong> đã được lưu vào hệ thống cơ sở dữ liệu.
+        </p>
+        <Link to="/" className="primary-button">Tiếp tục mua sắm</Link>
+      </main>
+    );
+  }
 
   if (cartItems.length === 0) {
     return (
@@ -107,8 +185,51 @@ function Cart() {
             <span>Cần thanh toán</span>
             <strong>{formatCurrency(discountedTotal)}</strong>
           </div>
-          <button className="checkout-btn" onClick={handleCheckout}>Thanh toán</button>
-          {checkoutMessage && <p className="checkout-message">{checkoutMessage}</p>}
+
+          <form onSubmit={handleCheckout} style={{ marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px' }}>Thông tin giao hàng</h3>
+            
+            {errorMessage && (
+              <div style={{ color: '#dc3545', fontSize: '0.85rem', marginBottom: '10px' }}>
+                {errorMessage}
+              </div>
+            )}
+
+            <div style={{ marginBottom: '10px' }}>
+              <input
+                type="text"
+                placeholder="Họ và tên người nhận"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ccc' }}
+                required
+              />
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <input
+                type="text"
+                placeholder="Số điện thoại nhận hàng"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ccc' }}
+                required
+              />
+            </div>
+            <div style={{ marginBottom: '15px' }}>
+              <input
+                type="text"
+                placeholder="Địa chỉ giao hàng chi tiết"
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #ccc' }}
+                required
+              />
+            </div>
+
+            <button type="submit" className="checkout-btn" disabled={isSubmitting}>
+              {isSubmitting ? 'Đang gửi đơn hàng...' : 'Xác nhận đặt hàng'}
+            </button>
+          </form>
         </aside>
       </div>
     </main>

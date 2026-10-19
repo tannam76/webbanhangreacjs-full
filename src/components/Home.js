@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { categories, formatCurrency, products } from '../data/products';
+import { formatCurrency } from '../data/products';
+import { fetchCategories, fetchProducts } from '../services/api';
 
 const categoryShowcase = [
   {
@@ -22,19 +23,38 @@ const categoryShowcase = [
 
 function Home({ search }) {
   const [category, setCategory] = useState('Tất cả');
+  const [categoriesList, setCategoriesList] = useState(['Tất cả', 'Công nghệ', 'Thời trang', 'Phụ kiện']);
+  const [productList, setProductList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const productsPerPage = 6;
 
-  const filteredProducts = products.filter((product) => {
-    return (
-      product.name.toLowerCase().includes(search.toLowerCase()) &&
-      (category === 'Tất cả' || product.category === category)
-    );
-  });
+  // Load categories từ backend
+  useEffect(() => {
+    fetchCategories()
+      .then((cats) => {
+        if (Array.isArray(cats) && cats.length > 0) {
+          setCategoriesList(cats);
+        }
+      })
+      .catch((err) => console.warn('Lỗi tải categories:', err));
+  }, []);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
+  // Load products từ backend MySQL theo search & category
+  useEffect(() => {
+    setLoading(true);
+    fetchProducts(search, category)
+      .then((items) => {
+        setProductList(items || []);
+        setCurrentPage(1);
+      })
+      .catch((err) => console.warn('Lỗi tải products:', err))
+      .finally(() => setLoading(false));
+  }, [search, category]);
+
+  const totalPages = Math.max(1, Math.ceil(productList.length / productsPerPage));
   const startIndex = (currentPage - 1) * productsPerPage;
-  const currentProducts = filteredProducts.slice(startIndex, startIndex + productsPerPage);
+  const currentProducts = productList.slice(startIndex, startIndex + productsPerPage);
 
   const handlePrevPage = () => {
     if (currentPage > 1) {
@@ -129,14 +149,21 @@ function Home({ search }) {
                 setCurrentPage(1);
               }}
             >
-              {categories.map((item) => (
+              {categoriesList.map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </select>
           </div>
         </div>
 
-        {currentProducts.length > 0 ? (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Đang tải...</span>
+            </div>
+            <p style={{ marginTop: '10px' }}>Đang tải danh sách sản phẩm...</p>
+          </div>
+        ) : currentProducts.length > 0 ? (
           <div className="product-list">
             {currentProducts.map((product) => (
               <Link to={`/product/${product.id}`} key={product.id} className="product-card">
