@@ -4,13 +4,13 @@ services:
     env: node
     plan: free
 
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
 
     startCommand: npx serve -s build -l tcp://0.0.0.0:$PORT
 
     envVars:
       - key: NODE_VERSION
-        value: 18.20.8
+        value: 24.22.2
 
       - key: NODE_OPTIONS
         value: --max-old-space-size=1536

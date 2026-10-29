@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const { initDatabase, getIsConnected } = require('./config/db');
+const { initDatabase, query } = require('./config/db');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -21,15 +21,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    serverTime: new Date().toISOString(),
-    databaseConnected: getIsConnected(),
-    message: getIsConnected()
-      ? 'Backend và MySQL đã kết nối thành công!'
-      : 'Backend đang chạy, nhưng chưa kết nối được MySQL. Hãy kiểm tra XAMPP/Laragon.',
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    await query('SELECT 1');
+    res.json({
+      status: 'OK',
+      serverTime: new Date().toISOString(),
+      databaseConnected: true,
+    });
+  } catch (error) {
+    console.error('Health check database query failed:', error.message);
+    res.status(503).json({
+      status: 'ERROR',
+      serverTime: new Date().toISOString(),
+      databaseConnected: false,
+    });
+  }
 });
 
 // Mounting API routes
@@ -54,13 +61,18 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, async () => {
-  console.log(`===============================================`);
-  console.log(`🚀 Backend Server đang chạy tại: http://localhost:${PORT}`);
-  console.log(`📡 API Health check: http://localhost:${PORT}/api/health`);
-  console.log(`===============================================`);
+async function startServer() {
+  if (!(await initDatabase())) {
+    process.exitCode = 1;
+    return;
+  }
 
-  // Tự động kết nối và khởi tạo CSDL MySQL
-  await initDatabase();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend server listening on port ${PORT}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error('Backend startup failed:', error);
+  process.exitCode = 1;
 });

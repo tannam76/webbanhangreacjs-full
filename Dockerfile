@@ -1,36 +1,21 @@
-# Build stage
-FROM node:18.20.8-alpine AS builder
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm install
+COPY public ./public
+COPY src ./src
 
-# Copy source code
-COPY . .
+ARG REACT_APP_API_URL=/api
+ENV REACT_APP_API_URL=${REACT_APP_API_URL}
 
-# Build the app
 RUN npm run build
 
-# Production stage
-FROM node:18.20.8-alpine
+FROM nginx:1.28-alpine
 
-WORKDIR /app
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/build /usr/share/nginx/html
 
-# Install serve to run the production build
-RUN npm install -g serve
-
-# Copy built application from builder stage
-COPY --from=builder /app/build ./build
-
-# Expose port
-EXPOSE 3000
-
-# Set NODE_OPTIONS for memory management
-ENV NODE_OPTIONS=--max-old-space-size=1536
-
-# Start the application
-CMD ["serve", "-s", "build", "-l", "tcp://0.0.0.0:3000"]
+EXPOSE 80
