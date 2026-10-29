@@ -24,10 +24,12 @@ pipeline {
     stage('Checkout') {
       steps {
         checkout scm
+
         script {
           if (env.GIT_BRANCH && !(env.GIT_BRANCH in ['origin/main', 'main'])) {
             error("Deployment is restricted to main; checked out ${env.GIT_BRANCH}.")
           }
+
           env.COMMIT_TAG = sh(
             script: 'git rev-parse --short=12 HEAD',
             returnStdout: true
@@ -44,17 +46,29 @@ pipeline {
               error("Configure ${name} in Jenkins before running this pipeline.")
             }
           }
+
           if (!(env.DOCKERHUB_NAMESPACE ==~ /[a-z0-9][a-z0-9_-]*/)) {
             error('DOCKERHUB_NAMESPACE must be a lowercase Docker Hub namespace.')
           }
+
           if (!(env.EC2_SSH_HOST ==~ /[A-Za-z0-9.-]+/)) {
             error('EC2_SSH_HOST must be an IPv4 address or DNS hostname.')
           }
+
           if (!(env.EC2_SSH_USER ==~ /[a-z_][a-z0-9_-]*/)) {
             error('EC2_SSH_USER contains unsupported characters.')
           }
         }
-        sh 'command -v node && command -v npm && command -v docker && command -v ssh && command -v scp && command -v tar'
+
+        sh '''
+          set -eu
+          command -v node
+          command -v npm
+          command -v docker
+          command -v ssh
+          command -v scp
+          command -v tar
+        '''
       }
     }
 
@@ -77,10 +91,12 @@ pipeline {
       steps {
         sh '''
           set -eu
+
           docker build \
             --build-arg REACT_APP_API_URL=/api \
             --tag "docker.io/${DOCKERHUB_NAMESPACE}/${FRONTEND_IMAGE}:${COMMIT_TAG}" \
             --file Dockerfile .
+
           docker build \
             --tag "docker.io/${DOCKERHUB_NAMESPACE}/${BACKEND_IMAGE}:${COMMIT_TAG}" \
             --file server/Dockerfile server
@@ -95,18 +111,20 @@ pipeline {
           usernameVariable: 'DOCKERHUB_USER',
           passwordVariable: 'DOCKERHUB_TOKEN'
         )]) {
-          sh '''
-            set -eu
-            printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USER" --password-stdin
-          '''
-          try {
-            sh '''
-              set -eu
-              docker push "docker.io/${DOCKERHUB_NAMESPACE}/${FRONTEND_IMAGE}:${COMMIT_TAG}"
-              docker push "docker.io/${DOCKERHUB_NAMESPACE}/${BACKEND_IMAGE}:${COMMIT_TAG}"
-            '''
-          } finally {
-            sh 'docker logout'
+          script {
+            try {
+              sh '''
+                set -eu
+
+                printf '%s' "$DOCKERHUB_TOKEN" |
+                  docker login --username "$DOCKERHUB_USER" --password-stdin
+
+                docker push "docker.io/${DOCKERHUB_NAMESPACE}/${FRONTEND_IMAGE}:${COMMIT_TAG}"
+                docker push "docker.io/${DOCKERHUB_NAMESPACE}/${BACKEND_IMAGE}:${COMMIT_TAG}"
+              '''
+            } finally {
+              sh 'docker logout'
+            }
           }
         }
       }
@@ -114,12 +132,19 @@ pipeline {
 
     stage('Deploy to EC2') {
       steps {
-        withCredentials([file(credentialsId: 'ec2-known-hosts', variable: 'SSH_KNOWN_HOSTS')]) {
+        withCredentials([
+          file(
+            credentialsId: 'ec2-known-hosts',
+            variable: 'SSH_KNOWN_HOSTS'
+          )
+        ]) {
           sshagent(credentials: ['ec2-ssh-key']) {
             sh '''
               set -eu
+
               TARGET="${EC2_SSH_USER}@${EC2_SSH_HOST}"
               BUNDLE="deployment-${COMMIT_TAG}.tar.gz"
+
               tar -czf "$BUNDLE" \
                 docker-compose.prod.yml \
                 server/database/schema.sql \
@@ -127,11 +152,20 @@ pipeline {
                 scripts/deploy-remote.sh \
                 scripts/rollback-remote.sh \
                 scripts/check-health.sh
+
               trap 'rm -f "$BUNDLE"' EXIT
 
-              SSH_OPTIONS="-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$SSH_KNOWN_HOSTS"
-              scp $SSH_OPTIONS "$BUNDLE" "$TARGET:/tmp/$BUNDLE"
-              ssh $SSH_OPTIONS "$TARGET" \
+              scp \
+                -o BatchMode=yes \
+                -o StrictHostKeyChecking=yes \
+                -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS" \
+                "$BUNDLE" "$TARGET:/tmp/$BUNDLE"
+
+              ssh \
+                -o BatchMode=yes \
+                -o StrictHostKeyChecking=yes \
+                -o "UserKnownHostsFile=$SSH_KNOWN_HOSTS" \
+                "$TARGET" \
                 "mkdir -p /opt/shoptn && tar -xzf /tmp/$BUNDLE -C /opt/shoptn && rm -f /tmp/$BUNDLE && chmod 700 /opt/shoptn/scripts/deploy-remote.sh /opt/shoptn/scripts/rollback-remote.sh /opt/shoptn/scripts/check-health.sh && /opt/shoptn/scripts/deploy-remote.sh '$COMMIT_TAG' '$DOCKERHUB_NAMESPACE'"
             '''
           }
