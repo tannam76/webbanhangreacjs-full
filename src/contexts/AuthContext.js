@@ -4,8 +4,22 @@ import { fetchCurrentUser } from '../services/api';
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  const getInitialUser = () => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (!savedUser) return null;
+      const parsedUser = JSON.parse(savedUser);
+      return parsedUser?.username ? parsedUser : null;
+    } catch (error) {
+      console.error('Không thể đọc user/token:', error);
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      return null;
+    }
+  };
+
+  const [user, setUser] = useState(getInitialUser);
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   // ==============================
@@ -25,7 +39,6 @@ export const AuthProvider = ({ children }) => {
             if (meRes.success && meRes.user) {
               setUser(meRes.user);
               localStorage.setItem('user', JSON.stringify(meRes.user));
-              setLoading(false);
               return;
             }
           } catch (e) {
