@@ -26,7 +26,8 @@ pipeline {
         checkout scm
 
         script {
-          if (env.GIT_BRANCH && !(env.GIT_BRANCH in ['origin/main', 'main'])) {
+          if (env.GIT_BRANCH &&
+              !(env.GIT_BRANCH in ['origin/main', 'main'])) {
             error("Deployment is restricted to main; checked out ${env.GIT_BRANCH}.")
           }
 
@@ -41,10 +42,19 @@ pipeline {
     stage('Validate configuration') {
       steps {
         script {
-          ['DOCKERHUB_NAMESPACE', 'EC2_SSH_HOST', 'EC2_SSH_USER'].each { name ->
-            if (!env[name]?.trim() || env[name].startsWith('YOUR_')) {
-              error("Configure ${name} in Jenkins before running this pipeline.")
-            }
+          if (!env.DOCKERHUB_NAMESPACE?.trim() ||
+              env.DOCKERHUB_NAMESPACE.startsWith('YOUR_')) {
+            error('Configure DOCKERHUB_NAMESPACE in Jenkins.')
+          }
+
+          if (!env.EC2_SSH_HOST?.trim() ||
+              env.EC2_SSH_HOST.startsWith('YOUR_')) {
+            error('Configure EC2_SSH_HOST in Jenkins.')
+          }
+
+          if (!env.EC2_SSH_USER?.trim() ||
+              env.EC2_SSH_USER.startsWith('YOUR_')) {
+            error('Configure EC2_SSH_USER in Jenkins.')
           }
 
           if (!(env.DOCKERHUB_NAMESPACE ==~ /[a-z0-9][a-z0-9_-]*/)) {
