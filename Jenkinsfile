@@ -89,10 +89,11 @@ pipeline {
           node --version
           npm ci
           CI=true npm test -- --watchAll=false
+          npm ci --prefix server
+          npm test --prefix server
           node --check server/server.js
           node --check server/config/db.js
           npm run build
-          npm ci --prefix server
         '''
       }
     }

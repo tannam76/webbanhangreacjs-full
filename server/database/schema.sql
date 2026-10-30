@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS `orders` (
   `customer_phone` VARCHAR(50) DEFAULT NULL,
   `customer_address` TEXT DEFAULT NULL,
   `total` DECIMAL(15, 2) NOT NULL DEFAULT 0,
-  `status` ENUM('Chờ xác nhận', 'Đang giao', 'Đã giao', 'Đã hủy') DEFAULT 'Chờ xác nhận',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'Chờ xác nhận',
   `user_id` INT DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL

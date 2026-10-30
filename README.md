@@ -26,6 +26,9 @@ Lần đầu MySQL tạo bảng và danh mục/sản phẩm khởi tạo từ c�
 được lưu trong named volume `mysql-data`. Ứng dụng không tự tạo tài khoản quản
 trị hoặc ghi seed vào database hiện có. Để có dữ liệu catalog trên database mới,
 MySQL chạy `seed.sql` đúng một lần cùng lúc khởi tạo schema.
+Khi backend khởi động, ứng dụng tự nâng cấp cột `orders.status` từ schema cũ
+sang `VARCHAR(32)` để các trạng thái tiếng Việt được lưu ổn định trong database
+đã tồn tại.
 
 Để chạy backend trực tiếp thay vì Docker, cài Node.js LTS và các dependencies:
 
