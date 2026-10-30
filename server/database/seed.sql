@@ -1,6 +1,6 @@
 -- Runs only when the MySQL data volume is initialized for the first time.
 -- These rows are public catalog data, not accounts, orders, or credentials.
-
+SET NAMES utf8mb4;
 INSERT INTO `categories` (`id`, `name`) VALUES
 (1, 'Công nghệ'),
 (2, 'Thời trang'),
