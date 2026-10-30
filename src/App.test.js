@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from './App';
 import { CartProvider } from './contexts/CartContext';
 
@@ -18,8 +18,24 @@ test('renders admin page at /admin route when logged in as admin', async () => {
   );
 
   await waitFor(() => {
-    expect(screen.getByRole('heading', { name: /admin panel/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tổng quan' })).toBeInTheDocument();
   });
+
+  expect(screen.getByRole('link', { name: /ShopTN Admin/i })).toBeInTheDocument();
+  const adminNavigation = screen.getByRole('navigation', { name: 'Điều hướng quản trị' });
+  expect(within(adminNavigation).getByRole('link', { name: /Danh mục/i })).toHaveAttribute('href', '/admin/categories');
+
+  for (const [label, heading] of [
+    ['Sản phẩm', 'Sản phẩm'],
+    ['Đơn hàng', 'Đơn hàng'],
+    ['Khách hàng', 'Khách hàng'],
+    ['Danh mục', 'Danh mục'],
+  ]) {
+    fireEvent.click(within(adminNavigation).getByRole('link', { name: label, exact: true }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument();
+    });
+  }
 });
 
 test('account button opens logout menu for logged in user', async () => {

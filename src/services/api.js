@@ -98,6 +98,13 @@ export async function fetchCategories() {
   }
 }
 
+export async function createCategory(name) {
+  return request('/categories', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
 // 4. Auth API
 export async function loginUser(username, password) {
   return request('/auth/login', {

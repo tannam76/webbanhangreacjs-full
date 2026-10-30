@@ -1,5 +1,5 @@
 import { useContext, useState } from 'react';
-import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
 import { AuthContext, AuthProvider } from './contexts/AuthContext';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -29,22 +29,33 @@ function ProtectedAdminRoute({ children }) {
   return children;
 }
 
+function AppLayout({ search, setSearch }) {
+  const { pathname } = useLocation();
+  const isAdminPage = pathname.startsWith('/admin');
+
+  return (
+    <>
+      {!isAdminPage && <Header search={search} setSearch={setSearch} />}
+      <Routes>
+        <Route path="/" element={<Home search={search} />} />
+        <Route path="/product/:id" element={<ProductDetail />} />
+        <Route path="/cart" element={<Cart />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/admin/*" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
+      </Routes>
+      {!isAdminPage && <Footer />}
+    </>
+  );
+}
+
 function App() {
   const [search, setSearch] = useState('');
 
   return (
     <AuthProvider>
       <Router>
-        <Header search={search} setSearch={setSearch} />
-        <Routes>
-          <Route path="/" element={<Home search={search} />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
-        </Routes>
-        <Footer />
+        <AppLayout search={search} setSearch={setSearch} />
       </Router>
     </AuthProvider>
   );
