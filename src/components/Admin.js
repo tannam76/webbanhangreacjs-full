@@ -82,6 +82,7 @@ function Admin() {
   const [serverStats, setServerStats] = useState(null);
   const [dbStatus, setDbStatus] = useState({ connected: false, checked: false });
   const [loading, setLoading] = useState(false);
+  const [dataError, setDataError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [formData, setFormData] = useState(emptyProduct);
@@ -121,6 +122,11 @@ function Admin() {
     }
     if (statsResult.status === 'fulfilled') setServerStats(statsResult.value);
 
+    const failedRequests = [
+      ordersResult.status === 'rejected' && `đơn hàng (${ordersResult.reason.message})`,
+      statsResult.status === 'rejected' && `thống kê (${statsResult.reason.message})`,
+    ].filter(Boolean);
+    setDataError(failedRequests.length ? `Không thể tải ${failedRequests.join(' và ')}.` : '');
     setLoading(false);
   };
 
@@ -404,6 +410,12 @@ function Admin() {
               <div className={`alert alert-${actionMessage.type} admin-notification`} role="alert">
                 <span>{actionMessage.text}</span>
                 <button type="button" className="btn-close" aria-label="Đóng thông báo" onClick={() => setActionMessage({ type: '', text: '' })} />
+              </div>
+            )}
+
+            {dataError && (
+              <div className="alert alert-danger" role="alert">
+                {dataError} Hãy kiểm tra API/backend rồi bấm “Làm mới”.
               </div>
             )}
 

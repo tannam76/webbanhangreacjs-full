@@ -1,4 +1,5 @@
 const { query, getPool } = require('../config/db');
+const { randomUUID } = require('crypto');
 
 // Lấy danh sách tất cả đơn hàng
 async function getAllOrders(req, res) {
@@ -88,7 +89,7 @@ async function createOrder(req, res) {
       return res.status(400).json({ success: false, message: 'Giỏ hàng đang trống, không thể tạo đơn.' });
     }
 
-    const orderId = 'DH' + Math.floor(1000 + Math.random() * 9000);
+    const orderId = `DH${randomUUID().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
 
     connection = await pool.getConnection();
     await connection.beginTransaction();

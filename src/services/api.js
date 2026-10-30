@@ -126,13 +126,11 @@ export async function fetchCurrentUser() {
 
 // 5. Orders API
 export async function fetchOrders() {
-  try {
-    const res = await request('/orders');
-    return res.data || [];
-  } catch (error) {
-    console.info('Không thể tải đơn hàng từ MySQL, dùng danh sách rỗng.');
-    return [];
+  const res = await request('/orders');
+  if (!res.success || !Array.isArray(res.data)) {
+    throw new Error(res.message || 'Dữ liệu đơn hàng từ máy chủ không hợp lệ.');
   }
+  return res.data;
 }
 
 export async function createOrder(orderData) {
@@ -161,12 +159,11 @@ export async function fetchCustomers() {
 
 // 7. Stats API
 export async function fetchStats() {
-  try {
-    const res = await request('/stats');
-    return res.data;
-  } catch (error) {
-    return null;
+  const res = await request('/stats');
+  if (!res.success || !res.data) {
+    throw new Error(res.message || 'Dữ liệu thống kê từ máy chủ không hợp lệ.');
   }
+  return res.data;
 }
 
 export { API_BASE_URL };

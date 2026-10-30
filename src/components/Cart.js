@@ -74,24 +74,19 @@ function Cart() {
 
       const res = await createOrder(orderPayload);
 
-      if (res.success) {
-        setOrderSuccess({
-          orderId: res.orderId,
-          total: discountedTotal,
-          customerName: customerName.trim(),
-        });
-        clearCart();
+      if (!res?.success || !res.orderId) {
+        throw new Error(res?.message || 'Máy chủ chưa xác nhận lưu đơn hàng.');
       }
-    } catch (err) {
-      console.warn('Lỗi lưu đơn hàng vào MySQL:', err.message);
-      // Fallback lưu đơn hàng
-      const fakeId = 'DH' + Math.floor(1000 + Math.random() * 9000);
+
       setOrderSuccess({
-        orderId: fakeId,
+        orderId: res.orderId,
         total: discountedTotal,
         customerName: customerName.trim(),
       });
       clearCart();
+    } catch (err) {
+      console.error('Không thể lưu đơn hàng:', err);
+      setErrorMessage(err.message || 'Không thể lưu đơn hàng. Vui lòng kiểm tra kết nối và thử lại.');
     } finally {
       setIsSubmitting(false);
     }
@@ -190,7 +185,7 @@ function Cart() {
             <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px' }}>Thông tin giao hàng</h3>
             
             {errorMessage && (
-              <div style={{ color: '#dc3545', fontSize: '0.85rem', marginBottom: '10px' }}>
+              <div role="alert" style={{ color: '#dc3545', fontSize: '0.85rem', marginBottom: '10px' }}>
                 {errorMessage}
               </div>
             )}
