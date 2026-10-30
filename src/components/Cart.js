@@ -1,6 +1,6 @@
-import { faMinus, faPlus, faTrash, faCheckCircle } from '@fortawesome/free-solid-svg-icons';
+import { faCheckCircle, faMinus, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import { Link } from 'react-router-dom';
 import '../assets/style/cart.css';
 import { AuthContext } from '../contexts/AuthContext';
@@ -107,7 +107,7 @@ function Cart() {
         </p>
         <p style={{ color: '#666', maxWidth: '500px', margin: '0 auto 24px' }}>
           Cảm ơn bạn <strong>{orderSuccess.customerName}</strong>. Đơn hàng trị giá{' '}
-          <strong>{formatCurrency(orderSuccess.total)}</strong> đã được lưu vào hệ thống cơ sở dữ liệu.
+          <strong>{formatCurrency(orderSuccess.total)}</strong> đã được ghi nhận. Chúng tôi sẽ liên hệ với bạn sớm để xác nhận và giao hàng.
         </p>
         <Link to="/" className="primary-button">Tiếp tục mua sắm</Link>
       </main>
