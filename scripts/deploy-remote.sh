@@ -57,7 +57,7 @@ restore_previous() {
       echo "Automatic rollback could not restore service health; inspect docker compose logs." >&2
       return 1
     fi
-    if ! ./scripts/check-health.sh http://127.0.0.1; then
+    if ! ./scripts/check-health.sh http://127.0.0.1:8081; then
       echo "Previous image started but failed its health check." >&2
       return 1
     fi
@@ -82,7 +82,7 @@ if ! $COMPOSE up -d --wait --wait-timeout 120; then
   exit 1
 fi
 
-if ! ./scripts/check-health.sh http://127.0.0.1; then
+if ! ./scripts/check-health.sh http://127.0.0.1:8081; then
   restore_previous || true
   echo "Post-deploy health check failed." >&2
   exit 1

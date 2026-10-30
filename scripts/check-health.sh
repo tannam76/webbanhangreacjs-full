@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-BASE_URL="${1:-http://127.0.0.1}"
+BASE_URL="${1:-http://127.0.0.1:8081}"
 
 if ! curl --fail --silent --show-error "$BASE_URL/" --output /dev/null; then
   echo "Frontend is not responding at $BASE_URL/." >&2
